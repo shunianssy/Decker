@@ -1,7 +1,6 @@
-# [简体中文](https://github.com/shunianssy/Decker/blob/main/Readme_Zn.md)
-(查看简体中文以获取我最新思路以及更改方案)
-(Check the simplified Chinese version for my latest ideas and revised plans.)
-()
+# [简体中文](https://github.com/shunianssy/Decker/blob/main/Readme_Zn.md)   
+(查看简体中文以获取我最新思路以及更改方案)  
+(Check the simplified Chinese version for my latest ideas and revised plans.)   
 以下是原版简介
 
 Decker
