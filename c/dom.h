@@ -393,7 +393,7 @@ lv* buffer_hist(lv*x,int sign){
 lv* buffer_bounds(lv*b){
 	pair s=buff_size(b);rect d={s.x,s.y,0,0};
 	for(int z=0;z<b->c;z++)if(b->sv[z]!=0){int x=z%s.x, y=z/s.x; d.x=MIN(d.x,x), d.y=MIN(d.y,y), d.w=MAX(d.w,x), d.h=MAX(d.h,y);}
-	pair rp={d.x,d.y},rs={MIN(s.x,d.w-d.x+1),MIN(s.y,d.h-d.y+1)};
+	pair rp={d.x,d.y},rs={MAX(0,MIN(s.x,d.w-d.x+1)),MAX(0,MIN(s.y,d.h-d.y+1))};
 	lv*r=lmd();dset(r,lmistr("pos"),lmpair(rp)),dset(r,lmistr("size"),lmpair(rs));return r;
 }
 int is_empty(lv*x){pair s=image_size(x);return s.x==0&&s.y==0;}
@@ -1151,7 +1151,7 @@ void draw_text_fit(rect r,char*text,lv*f,int pattern){
 		else if(x+font_gw(f,c)>=(r.w-ew)){glyph_push((pair){x,y},ELLIPSIS);while(text[z]&&text[z]!='\n')z++;x=0;if(text[z]){y+=fh;}else{z--;}}
 		else{glyph_push((pair){x,y},c),x+=font_gw(f,c)+font_sw(f);}
 	}
-	int yo=ceil((r.h-(y+fh))/2.0);for(int z=0;z<glyph_count;z++){
+	int yo=MAX(0,ceil((r.h-(y+fh))/2.0));for(int z=0;z<glyph_count;z++){
 		glyph g=glyphs[z]; g.pos.x+=r.x,g.pos.y+=yo+r.y;
 		font_each(f,g.c)if(font_gpix(f,g.c,b,a)&&inclip(g.pos.x+b,g.pos.y+a))PIX(g.pos.x+b,g.pos.y+a)=pattern;
 	}
@@ -1246,15 +1246,22 @@ void draw_text_wrap(rect r,int pattern){
 		font_each(g.font,g.c)if(font_gpix(g.font,g.c,b,a)&&inclip(g.pos.x+b,g.pos.y+a))PIX(g.pos.x+b,g.pos.y+a)=gc;
 	}frame.clip=oc;
 }
-void draw_text_rich(rect r,int pattern,int opaque){
-	rect oc=frame.clip;frame.clip=r;for(int z=0;z<layout_count;z++){
+void draw_text_rich_raw(rect r,int pattern,int opaque){
+	for(int z=0;z<layout_count;z++){
 		glyph_box g=layout[z];if(g.pos.w<1)continue; // skip squashed spaces/newlines
 		if(g.pos.y+g.pos.h<0||g.pos.y>r.h)continue; g.pos.x+=r.x, g.pos.y+=r.y; // coarse clip
 		int gc=g.pat==1?pattern:g.pat;
 		if(lis(g.arg)&&g.arg->c){draw_hline(g.pos.x,g.pos.x+g.pos.w,g.pos.y+g.pos.h-1,19);}
 		if(image_is(g.arg)){buffer_paste(g.pos,frame.clip,g.arg->b,frame.buffer,opaque);}
 		else{font_each(g.font,g.c)if(font_gpix(g.font,g.c,b,a)&&inclip(g.pos.x+b,g.pos.y+a))PIX(g.pos.x+b,g.pos.y+a)=gc;}
-	}frame.clip=oc;
+	}
+}
+void draw_text_rich(rect r,int pattern,int opaque){
+	rect oc=frame.clip;frame.clip=r;draw_text_rich_raw(r,pattern,opaque);frame.clip=oc;
+}
+void draw_text_align(rect r,char*text,lv*font,int pattern,int align){
+	int fh=font_h(font);pair s=layout_plaintext(text,font,align,(pair){r.w,MAX(r.h,fh)});
+	draw_text_rich_raw(box_center(r,s),pattern,1);
 }
 
 // Sound interface
@@ -1609,8 +1616,8 @@ lv* interface_canvas(lv*self,lv*i,lv*x){
 	lv*data=self->b;lv*card=dget(data,lmistr("card")),*deck=dget(card->b,lmistr("deck")),*fonts=dget(deck->b,lmistr("fonts"));
 	if(x){
 		ikey("brush"  ){int n=MAX(0,ln(x));if(lis(x)){int v=dgeti(dget(deck->b,lmistr("brushes")),x);if(v!=-1)n=24+v;}dset(data,i,lmn(n));return x;}
-		ikey("pattern"){int n=CLAMP(0,ln(x),255);dset(data,i,lmn(n));return x;}
 		ikey("font"   ){dset(data,i,normalize_font(fonts,x));return x;}
+		ikey("pattern"){return interface_widget(self,i,x);}
 		if(!lis(i)    ){return interface_image(container_image(self,1),i,x);}
 		if(dget(data,lmistr("free")))return x;
 		ikey("border"   ){dset(data,i,lmn(lb(x)));return x;}
@@ -1623,7 +1630,6 @@ lv* interface_canvas(lv*self,lv*i,lv*x){
 		ikey("border"   ){lv*r=dget(data,i);return r?r:ONE;}
 		ikey("draggable"){lv*r=dget(data,i);return r?r:ZERO;}
 		ikey("brush"    ){lv*r=dget(data,i);return r?r:ZERO;}
-		ikey("pattern"  ){lv*r=dget(data,i);return r?r:ONE;}
 		ikey("size"     ){lv*r=dget(data,i);return r?r:lmpair((pair){100,100});}
 		ikey("scale"    ){lv*r=dget(data,i);return r?r:lmn(1.0);}
 		ikey("lsize"    ){pair s=getpair(ifield(self,"size"));float z=ln(ifield(self,"scale"));return lmpair((pair){ceil(s.x/z),ceil(s.y/z)});}
@@ -1653,7 +1659,6 @@ lv* canvas_read(lv*x,lv*r){
 	init_field(ri,"border"   ,x);
 	init_field(ri,"draggable",x);
 	init_field(ri,"brush"    ,x);
-	init_field(ri,"pattern"  ,x);
 	init_field(ri,"font"     ,x);
 	return ri;
 }
@@ -1663,7 +1668,6 @@ lv* canvas_write(lv*x){
 	{lv*k=lmistr("image"    ),*v=dget(data,k);if(v&&!is_blank(v)&&!lb(ifield(x,"volatile")))dset(r,k,image_write(v));}
 	{lv*k=lmistr("draggable"),*v=dget(data,k);if(v&&ln(v)!=0)dset(r,k,v);}
 	{lv*k=lmistr("brush"    ),*v=dget(data,k);if(v&&ln(v)!=0)dset(r,k,v);}
-	{lv*k=lmistr("pattern"  ),*v=dget(data,k);if(v&&ln(v)!=1)dset(r,k,v);}
 	{lv*k=lmistr("scale"    ),*v=dget(data,k);if(v)dset(r,k,v);}
 	{lv*k=lmistr("clip"     ),*v=dget(data,k);if(v&&!matchr(v,lmrect((rect){0,0,lsize.x,lsize.y})))dset(r,k,v);}
 	return r;
@@ -1672,13 +1676,14 @@ lv* canvas_write(lv*x){
 // Button interface
 
 enum button_style{button_round,button_rect,button_check,button_invisible,button_radio};
-typedef struct {char*text;rect size;lv*font;int style,show,locked;char shortcut;} button;
+typedef struct {char*text;rect size;lv*font;int pattern,style,show,locked;char shortcut;} button;
 char*button_styles[]={"round","rect","check","invisible",NULL};
 button unpack_button(lv*x){
 	return (button){
 		ifield(x,"text")->sv,
 		rect_pair(getpair(ifield(x,"pos")),getpair(ifield(x,"size"))),
 		ifield(x,"font"),
+		ln(ifield(x,"pattern")),
 		ordinal_enum(ifield(x,"style"),button_styles),
 		ordinal_enum(ifield(x,"show"),widget_shows),
 		lb(ifield(x,"locked")),
@@ -1742,8 +1747,8 @@ void rtext_appendr(lv*table,lv*suffix){
 	EACH(z,t)rtext_append(table,t->lv[z],f->lv[z],a->lv[z],p->lv[z]);
 }
 lv* rtext_string(lv*table,pair cursor){
-	str r=str_new(); int i=0,a=MIN(cursor.x,cursor.y),b=MAX(cursor.x,cursor.y); lv*t=dget(table,lmistr("text"));
-	EACH(z,t){lv*s=t->lv[z];for(int z=0;z<s->c;z++,i++)if(i>=a&&i<b)str_addc(&r,s->sv[z]);}
+	str r=str_new(); int i=0,a=MIN(cursor.x,cursor.y),b=MAX(cursor.x,cursor.y); lv*t=dget(table,lmistr("text")),*g=dget(table,lmistr("arg"));
+	EACH(z,t){lv*s=t->lv[z];int img=image_is(g->lv[z]);for(int z=0;z<s->c;z++,i++)if(!img&&i>=a&&i<b)str_addc(&r,s->sv[z]);}
 	return lmstr(r);
 }
 lv* rtext_all(lv*table){return rtext_string(table,(pair){0,RTEXT_END});}
@@ -1918,7 +1923,6 @@ lv* interface_field(lv*self,lv*i,lv*x){
 			dset(data,i,rtext_cast(x));field_notify(self);return x;
 		}
 		ikey("border"   ){dset(data,i,lmn(lb(x)));return x;}
-		ikey("pattern"  ){int n=CLAMP(0,ln(x),255);dset(data,i,lmn(n));return x;}
 		ikey("scrollbar"){dset(data,i,lmn(lb(x)));return x;}
 		ikey("style"    ){dset(data,i,normalize_enum(x,field_styles));iwrite(self,lmistr("value"),dget(data,lmistr("value")));return x;}
 		ikey("align"    ){dset(data,i,normalize_enum(x,field_aligns));return x;}
@@ -1930,7 +1934,6 @@ lv* interface_field(lv*self,lv*i,lv*x){
 		ikey("scroll"   ){lv*r=value_inherit(self,i);return r?r:ZERO;}
 		ikey("scrollbar"){lv*r=dget(data,i);return r?r:ZERO;}
 		ikey("border"   ){lv*r=dget(data,i);return r?r:ONE;}
-		ikey("pattern"  ){lv*r=dget(data,i);return r?r:ONE;}
 		ikey("style"    ){lv*r=dget(data,i);return r?r:lmistr(field_styles[0]);}
 		ikey("align"    ){lv*r=dget(data,i);return r?r:lmistr(field_aligns[0]);}
 		ikey("size"     ){lv*r=dget(data,i);return r?r:lmpair((pair){100,20});}
@@ -1946,7 +1949,6 @@ lv* field_read(lv*x,lv*r){
 	x=ld(x),r=lmi(interface_field,lmistr("field"),r);
 	{lv*k=lmistr("value"),*v=dget(x,k);if(v)iwrite(r,k,rtext_read(v));}
 	init_field(r,"border"   ,x);
-	init_field(r,"pattern"  ,x);
 	init_field(r,"scrollbar",x);
 	init_field(r,"style"    ,x);
 	init_field(r,"align"    ,x);
@@ -1956,7 +1958,6 @@ lv* field_read(lv*x,lv*r){
 lv* field_write(lv*x){
 	lv*data=x->b,*r=lmd();dset(r,lmistr("type"),lmistr("field"));int vol=lb(ifield(x,"volatile"));
 	{lv*k=lmistr("border"   ),*v=dget(data,k);if(v)dset(r,k,v);}
-	{lv*k=lmistr("pattern"  ),*v=dget(data,k);if(v&&ln(v)!=1)dset(r,k,v);}
 	{lv*k=lmistr("scrollbar"),*v=dget(data,k);if(v)dset(r,k,v);}
 	{lv*k=lmistr("style"    ),*v=dget(data,k);if(v&&strcmp(field_styles[0],v->sv))dset(r,k,v);}
 	{lv*k=lmistr("align"    ),*v=dget(data,k);if(v&&strcmp(field_aligns[0],v->sv))dset(r,k,v);}
@@ -1968,7 +1969,7 @@ lv* field_write(lv*x){
 // Slider interface
 
 enum slider_style{slider_horiz,slider_vert,slider_bar,slider_compact};
-typedef struct {rect size;lv*font,*format;int show,style,locked;double min,max,step,value;} slider;
+typedef struct {rect size;lv*font,*format;int pattern,show,style,locked;double min,max,step,value;} slider;
 char*slider_styles[]={"horiz","vert","bar","compact",NULL};
 double slider_normalize(fpair interval,double step,double n){double r=round(n/step)*step;return CLAMP(interval.x,r,interval.y);}
 slider unpack_slider(lv*x){
@@ -1977,6 +1978,7 @@ slider unpack_slider(lv*x){
 		rect_pair(getpair(ifield(x,"pos")),getpair(ifield(x,"size"))),
 		ifield(x,"font"),
 		ifield(x,"format"),
+		ln(ifield(x,"pattern")),
 		ordinal_enum(ifield(x,"show"),widget_shows),
 		ordinal_enum(ifield(x,"style"),slider_styles),
 		lb(ifield(x,"locked")),
@@ -2164,7 +2166,7 @@ void contraption_reflow(lv*c){
 }
 lv* interface_contraption(lv*self,lv*i,lv*x){
 	lv*data=self->b;char*masks[]={
-		"name","index","image","script","locked","animated","volatile","pos","show","font","toggle","event","offset","parent",
+		"name","index","image","script","locked","animated","volatile","pos","show","font","pattern","toggle","event","offset","parent",
 		NULL
 	};
 	lv*def=dget(data,lmistr("def"));
@@ -2214,6 +2216,7 @@ lv* contraption_read(lv*x,lv*r){
 
 // Widget interface
 
+int default_pattern(lv*wid){return button_is(wid)||(slider_is(wid)&&matchr(ifield(wid,"style"),lmistr("compact")))?32:1;}
 lv* n_toggle(lv*wid,lv*x){
 	lv*s=x->c<1?lmistr("solid"):x->lv[0], *v=x->c<2?ZERO:x->lv[1], *o=ifield(wid,"show"), *n=lmistr("none");
 	lv*r=(x->c<2?matchr(o,n):(lb(v)&&!matchr(v,n)))?s:n;iwrite(wid,lmistr("show"),r);return r;
@@ -2229,6 +2232,7 @@ lv* interface_widget(lv*self,lv*i,lv*x){
 		}
 		ikey("index"   ){reorder(widgets,dgeti(widgets,name),ln(x));return x;}
 		ikey("font"    ){dset(data,i,normalize_font(fonts,x));return x;}
+		ikey("pattern" ){dset(data,i,lmn(CLAMP(0,ln(x),255)));return x;}
 		ikey("script"  ){dset(data,i,ls(x));return x;}
 		ikey("locked"  ){dset(data,i,lmn(lb(x)));return x;}
 		ikey("animated"){dset(data,i,lmn(lb(x)));return x;}
@@ -2246,6 +2250,7 @@ lv* interface_widget(lv*self,lv*i,lv*x){
 		ikey("pos"     ){lv*r=dget(data,i);return r?r:lmpair((pair){0,0});}
 		ikey("show"    ){lv*r=dget(data,i);return r?r:lmistr(widget_shows[0]);}
 		ikey("font"    ){lv*r=dget(data,i);return r?dget(fonts,r): fonts->lv[button_is(self)?1:0];}
+		ikey("pattern" ){lv*r=dget(data,i);return r?r:lmn(default_pattern(self));}
 		ikey("toggle"  )return lmnat(n_toggle,self);
 		ikey("event"   )return lmnat(n_event,self);
 		ikey("parent"  )return card;
@@ -2270,6 +2275,7 @@ lv* widget_read(lv*x,lv*card){
 	init_field(ri,"size"    ,x);
 	init_field(ri,"script"  ,x);
 	init_field(ri,"font"    ,x);
+	init_field(ri,"pattern" ,x);
 	init_field(ri,"locked"  ,x);
 	init_field(ri,"animated",x);
 	init_field(ri,"volatile",x);
@@ -2289,6 +2295,7 @@ lv* widget_write(lv*x){
 	{lv*k=lmistr("volatile"),*v=dget(data,k);if(v&&lb(v))dset(r,k,v);}
 	{lv*k=lmistr("script"  ),*v=dget(data,k);if(v&&v->c)dset(r,k,v);}
 	{lv*k=lmistr("font"    ),*v=dget(data,k);if(v&&strcmp(button_is(x)?"menu":"body",v->sv))dset(r,k,v);}
+	{lv*k=lmistr("pattern" ),*v=dget(data,k);if(v&&ln(v)!=default_pattern(x))dset(r,k,v);}
 	{lv*k=lmistr("show"    ),*v=dget(data,k);if(v&&strcmp(widget_shows[0],v->sv))dset(r,k,v);}
 	return l_comma(r,button_is(x)?button_write(x): field_is (x)?field_write (x):slider_is(x)?slider_write(x):
 	                 grid_is  (x)?grid_write  (x): canvas_is(x)?canvas_write(x):contraption_is(x)?contraption_write(x): lmd());
@@ -2554,6 +2561,7 @@ lv* interface_prototype(lv*self,lv*i,lv*x){
 		ikey("script"     ){lv*r=dget(data,i);return r?r:lmistr("");}
 		ikey("template"   ){lv*r=dget(data,i);return r?r:lmistr("");}
 		ikey("font"       )return l_first(ifield(ivalue(self,"deck"),"fonts"));
+		ikey("pattern"    )return ONE;
 		ikey("show"       )return lmistr("solid");
 		ikey("parent"     )return ifield(deck,"card");
 		ikey("size"       )return dget(data,i);
@@ -3294,8 +3302,15 @@ lv*n_readdeck(lv*self,lv*a){return deck_read(lin(l_first(a))?lmistr(""):n_read(s
 lv*n_readfile(lv*self,lv*a);// forward ref
 char danger_open_path[PATH_MAX];
 int danger_open_pending=0;
+lv* danger_open_deck=NULL;
 lv*n_danger_open(lv*self,lv*a){
-	snprintf(danger_open_path,sizeof(danger_open_path),"%s",ls(l_first(a))->sv);
+	if(deck_is(l_first(a))){
+		danger_open_deck=l_first(a);
+		snprintf(danger_open_path,sizeof(danger_open_path),"%s","");
+	}else{
+		danger_open_deck=deck_read(n_read(NULL,l_list(l_first(a))));
+		snprintf(danger_open_path,sizeof(danger_open_path),"%s",ls(l_first(a))->sv);
+	}
 	danger_open_pending=1;(void)self;return LNIL;
 }
 lv* interface_danger(lv*self,lv*i,lv*x){

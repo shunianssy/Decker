@@ -151,6 +151,34 @@ Web-Decker has generally the same tools and functionality as Native-Decker, but 
 In a nutshell, Web-Decker provides an excellent way to share your decks with other people, and a convenient way to play with Decker when you're unable or unwilling to install the native application. If you're making new decks, Native-Decker's saving functionality and keyboard shortcuts may provide a better experience. You can use both however you please- a deck is a deck!
 
 
+Locked Decks
+============
+Sometimes when you share a deck with others you won't want Decker's editing tools to be visible. Perhaps they're visually distracting, or maybe you want to keep parts of your deck a surprise until the right moment? The solution is to _lock_ your deck.
+
+In the _File &#8594; Properties_ dialog, clicking _Protect..._ will prompt you for a location to save a locked copy of the current deck. Locked decks hide the menu bar and disable most editing features and keyboard shortcuts, leaving the user strictly in "Interact Mode". Note that card backgrounds in a locked deck will reveal drawings underneath the menu bar: pressing `m` while using drawing tools can temporarily reveal this area as well.
+
+Locking a deck is _not_ obfuscation or encryption; it's a polite suggestion. If you ever get stuck in a locked deck in Native-Decker, you can use ctrl+U+L+D (Un-Lock-Deck) to unlock it again. In Web-Decker, you can unlock a deck by opening your browser's JavaScript console and typing
+```
+deck.locked=false
+```
+When needed, the [App Interface](#appinterface) can be used to reintroduce your own UI for controlling fullscreen mode, saving, and exiting decks.
+
+Here's a very simple [Contraption](#contraptions) you can paste into your own decks for toggling between "locked" and "unlocked" mode for a deck. Consider using it to test your decks before exporting locked versions! For some decks you could leave this contraption on the title card; perhaps games could offer it as a reward for completion?
+```
+%%WGT0{"w":[{"name":"lockbox1","type":"contraption","size":[20,20],"pos":[210,146],
+"def":"lockbox","widgets":{"c":{},"b":{},"ims":{}}}],"d":{"lockbox":{"name":"lockbox",
+"size":[20,20],"margin":[1,1,2,2],"description":"Make your deck manually lockable and unlockable.",
+"script":"on view do\n i:ims.images[deck.locked]\n c.clear[]\n c.paste[i .5*c.size-i.size]\nend",
+"attributes":{"name":[],"label":[],"type":[]},"widgets":{"c":{"type":"canvas","size":[20,20],
+"pos":[0,0],"locked":1,"volatile":1,"border":0,"scale":1},"b":{"type":"button","size":[20,20],
+"pos":[0,0],"script":"on click do\n deck.locked:!deck.locked\n view[]\nend\n","show":"transparent",
+"style":"invisible"},"ims":{"type":"field","size":[100,20],"pos":[154,-5],"locked":1,"show":"none",
+"value":{"text":["","i","i"],"font":["","",""],
+"arg":["","%%IMG0ABAAEAAAP/xAAkPCR+JGYkZiQGJP8k/yT/JP8k/yQAI//AAA",
+"%%IMG0ABAAEAAAP/xAAkACQ8JH4kZiRmJP8k/yT/JP8k/yQAI//AAA"]}}}}}}
+```
+
+
 The Widgets
 ===========
 Let's take a look at each of Decker's widgets in detail.
@@ -647,6 +675,7 @@ The _app_ interface exposes control over the Decker application itself. It is av
 | :------------------------- | :---------------------------------------------------------------------------------------------------- |
 | `typeof x`                 | `"app"`                                                                                               |
 | `x.fullscreen`             | Is Decker in fullscreen mode? On write, attempt to switch if possible; may not succeed. (r/w)         |
+| `x.gridsize`               | A `(w,h)` pair giving the current grid overlay dimensions. (r/w)                                      |
 | `x.playing`                | If any audio is currently playing (not counting a background `loop`), `1`. Otherwise, `0`.            |
 | `x.render[x]`              | Draw the visual appearance of card or widget `x` as an Image interface.                               |
 | `x.save[]`                 | Save the current deck, in-place if possible. May prompt the user for a save location.                 |
@@ -1094,6 +1123,7 @@ The button widget is a clickable button, possibly with a stateful checkbox.
 | `x.size`                | The `size` of the widget in pixels. r/w.                                                              |
 | `x.show`                | Widget compositing mode; one of {`"solid"`, `"invert"`, `"transparent"`, `"none"`}. r/w.              |
 | `x.font`                | The font used for drawing this widget. Can be set by font name or a font interface. r/w.              |
+| `x.pattern`             | Int. The pattern used for styling this widget. r/w.                                                   |
 | `x.index`               | The ordinal position of this widget on the card, counting from 0. r/w.                                |
 | `x.parent`              | The Card, Contraption or Prototype containing this widget.                                            |
 | `x.text`                | String. The label shown on this button. r/w.                                                          |
@@ -1180,6 +1210,7 @@ The slider widget represents a single number, constrained within a configurable 
 | `x.size`                | The `size` of the widget in pixels. r/w.                                                              |
 | `x.show`                | Widget compositing mode; one of {`"solid"`, `"invert"`, `"transparent"`, `"none"`}. r/w.              |
 | `x.font`                | The font used for drawing this widget. Can be set by font name or a font interface. r/w.              |
+| `x.pattern`             | Int. The pattern used for styling this widget. r/w.                                                   |
 | `x.index`               | The ordinal position of this widget on the card, counting from 0. r/w.                                |
 | `x.parent`              | The Card, Contraption or Prototype containing this widget.                                            |
 | `x.value`               | Number. The numeric content of this slider. r/w.                                                      |
@@ -1207,6 +1238,7 @@ The grid widget represents an interactive spreadsheet-style view of a table.
 | `x.size`                | The `size` of the widget in pixels. r/w.                                                              |
 | `x.show`                | Widget compositing mode; one of {`"solid"`, `"invert"`, `"transparent"`, `"none"`}. r/w.              |
 | `x.font`                | The font used for drawing this widget. Can be set by font name or a font interface. r/w.              |
+| `x.pattern`             | Int. The pattern used for styling this widget. r/w.                                                   |
 | `x.index`               | The ordinal position of this widget on the card, counting from 0. r/w.                                |
 | `x.parent`              | The Card, Contraption or Prototype containing this widget.                                            |
 | `x.value`               | The table displayed in this grid. r/w.                                                                |
@@ -1325,6 +1357,7 @@ Contraptions are custom widgets, defined in a [Prototype](#prototypeinterface). 
 | `x.size`                | The `size` of the widget in pixels. r/w.                                                              |
 | `x.show`                | Widget compositing mode; one of {`"solid"`, `"invert"`, `"transparent"`, `"none"`}. r/w.              |
 | `x.font`                | The font used for drawing this widget. Can be set by font name or a font interface. r/w.              |
+| `x.pattern`             | Int. The pattern used for styling this widget. r/w.                                                   |
 | `x.index`               | The ordinal position of this widget on the card, counting from 0. r/w.                                |
 | `x.parent`              | The Card containing this widget.                                                                      |
 | `x.def`                 | The Prototype of this contraption.                                                                    |
@@ -1389,6 +1422,7 @@ Prototypes are definitions from which [Contraptions](#contraptioninterface) are 
 | `x.image`               | An _image_ interface representing the Prototype's background. r/w.                                     |
 | `x.show`                | The string `"solid"`.                                                                                  |
 | `x.font`                | The default font `body`.                                                                               |
+| `x.pattern`             | The default pattern index `1`.                                                                         |
 | `x.parent`              | Equivalent to `deck.card`.                                                                             |
 | `x.resizable`           | Bool. Can instances of this Prototype be resized? r/w.                                                 |
 | `x.margin`              | A list of 4 integers. See below for details. r/w.                                                      |
@@ -1416,7 +1450,7 @@ The `attributes` table provides information about the attributes of contraption 
 | `"code"`       | A Lil string          | Large field in "code" editing mode. |
 | `"rich"`       | An rtext table        | Large field in "rich" editing mode. |
 
-Modifying the attributes of a Prototype will automatically update Contraption instances in the current deck. Modifying the attributes of widgets contained in this Prototype will require explicitly calling `prototype.update[]`. In either case, when a definition is updated, the `name`, `pos`, `show`, `locked`, `animated`, `volatile`, `font`, and `script` attributes of Contraptions will be preserved, as well the `value`, `scroll`, `row`, `col`, and image content of the widgets they contain (as applicable) if they have been modified from their original values in the prototype, but everything else will be regenerated from the definition. The _state_ of contraptions is kept, and the _behavior and appearance_ is changed.
+Modifying the attributes of a Prototype will automatically update Contraption instances in the current deck. Modifying the attributes of widgets contained in this Prototype will require explicitly calling `prototype.update[]`. In either case, when a definition is updated, the `name`, `pos`, `show`, `locked`, `animated`, `volatile`, `font`, `pattern`, and `script` attributes of Contraptions will be preserved, as well the `value`, `scroll`, `row`, `col`, and image content of the widgets they contain (as applicable) if they have been modified from their original values in the prototype, but everything else will be regenerated from the definition. The _state_ of contraptions is kept, and the _behavior and appearance_ is changed.
 
 
 Events
@@ -1490,7 +1524,7 @@ end
 
 on drag pos do
 	if !me.locked|me.draggable
-		me.line[(pointer.prev-me.pos+me.container.pos)/me.scale pos]
+		me.line[(pointer.prev-me.offset)/me.scale x]
 	end
 end
 
@@ -1983,7 +2017,7 @@ When enabled, the _danger_ interface is available as a global constant named `da
 | `danger.shell[x]`*          | Execute string `x` as a shell command and block for its completion.                         |
 | `danger.read[path hint]`    | Read a file `path` using `hint` as necessary to control its interpretation.                 |
 | `danger.write[path x hint]` | Write a value `x` to a file `path`. Returns `1` on success.                                 |
-| `danger.open[path]`         | Instruct Decker to open a deck at `path`.                                                   |
+| `danger.open[x]`            | Instruct Decker to open a deck `x` or a deck at filesystem path `x` .                       |
 
 
 The `danger.path[]` function can perform a number of useful operations:
@@ -2007,7 +2041,7 @@ table t.dataset_data.column_names dict flip t.dataset_data.data
 
 Note that this function executes subcommands _synchronously_; a long-running shell invocation can lock up Decker! The `danger.shell[]` function is not available on Windows.
 
-The `danger.open[path]` function schedules Decker to open a target deck when the current script completes; Decker will reset its history and tool configuration as if the deck were opened manually. If `path` does not indicate a valid `.html` or `.deck` file (or any file), Decker will open a new document.
+The `danger.open[x]` function schedules Decker to open a target deck when the current script completes; Decker will reset its history and tool configuration as if the deck were opened manually. Providing this function with an existing deck interface offers an opportunity to choose a starting card, insert data, or generally customize the target deck before opening it. If path `x` does not indicate a valid `.html` or `.deck` file (or any file), Decker will open a new document.
 
 ---
 
@@ -2017,7 +2051,7 @@ Web-Decker also offers its own _danger_ interface which exposes a low-level brid
 | :----------------------- | :------------------------------------------------------------------------------------------ |
 | `typeof danger`          | `"danger"`                                                                                  |
 | `danger.js[x args...]`   | Evaluate a string `x` as JavaScript, optionally called with arguments `args`.               |
-| `danger.open[url]`       | Navigate to a different URL without prompting the user to confirm.                          |
+| `danger.open[url]`       | Navigate to a URL `x` or open a deck interface `x`.                                         |
 
 If `danger.js[x]` is called with a single argument, it will evaluate `x` as JavaScript and return the result. If the result of evaluating `x` is a JS function and additional arguments are supplied, those arguments will be passed to the function and it will be called. Lil values are automatically translated to JS values and vice-versa. Numbers, strings, lists, and dictionaries are recursively converted as copies, with appropriate coercion between the respective type systems. Array interfaces are converted into `Uint8Array` objects and vice-versa (irrespective of `cast`) using a shared underlying data store, allowing both Lil and JS to observe future mutations to such a data structure. Array _slices_ are not converted. Resizing Array interfaces from Lil may reallocate the internal buffer, breaking any shared references. Deck, Card, or Widget interfaces are passed unmodified, but should be treated as opaque values from the JS side. Functions are wrapped in thunks: Lil functions are exposed to JS as JS functions accepting and returning JS values, and JS functions are exposed to Lil as Lil functions accepting and returning Lil values. Any other values- including arbitrary JS objects and Lil tables or otherinterfaces- are converted to a JS `null` or a Lil `nil`, respectively.
 

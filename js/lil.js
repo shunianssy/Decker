@@ -53,13 +53,13 @@ coltab=x=>{
 	x.k.map((k,i)=>tab_set(r,ls(k),dyad.take(n,dyad.take(n,lil(x.v[i])?x.v[i]:lml([x.v[i]]))).v));return r
 }
 rowtab=x=>{
-	const ok=[],t=lmt()
-	x.v.map(r=>r.k.map(k=>{if(!tab_has(t,ls(k)))ok.push(k);tab_set(t,ls(k),[])}))
-	x.v.map(x=>ok.map(k=>tab_get(t,ls(k)).push(dget(x,k)||NIL)));return t
+	const ok=[],t=lmt(),v=x.v.map(ld)
+	v.map(r=>r.k.map(k=>{if(!tab_has(t,ls(k)))ok.push(k);tab_set(t,ls(k),[])}))
+	v.map(x=>ok.map(k=>tab_get(t,ls(k)).push(dget(x,k)||NIL)));return t
 }
 listab=x=>{
-	const m=x.v.reduce((r,x)=>max(r,count(x)),0);const t=lmt();for(let z=0;z<m;z++)tab_set(t,'c'+z,[])
-	x.v.map(row=>{for(let z=0;z<m;z++)tab_get(t,'c'+z).push(z>=count(row)?NIL:row.v[z])});return t
+	const v=x.v.map(ll), m=v.reduce((r,x)=>max(r,x.length),0);const t=lmt();for(let z=0;z<m;z++)tab_set(t,'c'+z,[])
+	v.map(row=>{for(let z=0;z<m;z++)tab_get(t,'c'+z).push(z>=row.length?NIL:row[z])});return t
 }
 tflip=x=>{
 	const c=tab_cols(x),kk=c.indexOf('key')>-1?'key':c[0],k=(tab_get(x,kk)||[]).map(ls),cc=c.filter(k=>k!=kk),r=lmt()
@@ -212,7 +212,7 @@ monad={
 	flip:   x=>lit(x)?tflip(x):lml(range(ll(x).reduce((w,z)=>max(w,lil(z)?count(z):1),0)).map(i=>lml(ll(x).map(c=> !lil(c)?c: i<count(c)?c.v[i]: NIL)))),
 	rows:   x=>rows(x),
 	cols:   x=>{const t=lt(x),k=tab_cols(t);return lmd(k.map(lms),k.map(x=>lml(tab_get(t,x))))},
-	table:  x=>lid(x)?coltab(x): lil(x)&&x.v.every(lid)?rowtab(x): lil(x)&&x.v.every(lil)?listab(x): lt(x),
+	table:  x=>lid(x)?coltab(x): lil(x)&&x.v.every(x=>lid(x)||linil(x))?rowtab(x): lil(x)&&x.v.every(x=>lil(x)||linil(x))?listab(x): lt(x),
 	'@tab': t=>{
 		t=lt(t);const r=tab_clone(t)
 		tab_set(r,'index' ,range(count(r)).map(lmn))
@@ -228,8 +228,8 @@ dyad={
 	'/':  vd((x,y)=>lmn(ln(x)/ln(y))),
 	'%':  vd((x,y)=>lmn(mod(ln(y),ln(x)))),
 	'^':  vd((x,y)=>lmn(Math.pow(ln(x),ln(y)))),
-	'<':  vd((x,y)=>lmn((linil(x)||lin(x))&&(linil(y)||lin(y))?ln(x)< ln(y): ls(x)< ls(y))),
-	'>':  vd((x,y)=>lmn((linil(x)||lin(x))&&(linil(y)||lin(y))?ln(x)> ln(y): ls(x)> ls(y))),
+	'<':  vd((x,y)=>lmn(lin(x)||lin(y)?ln(x)< ln(y): ls(x)< ls(y))),
+	'>':  vd((x,y)=>lmn(lin(x)||lin(y)?ln(x)> ln(y): ls(x)> ls(y))),
 	'=':  vd((x,y)=>lmn(lii(x)||lii(y)?x==y: linil(x)||linil(y)?x==y: lin(x)&&lin(y)?ln(x)==ln(y): ls(x)==ls(y))),
 	'&':  vd((x,y)=>lin(x)||lin(y)?lmn(min(ln(x),ln(y))): lms(ls(x)<ls(y)?ls(x):ls(y))),
 	'|':  vd((x,y)=>lin(x)||lin(y)?lmn(max(ln(x),ln(y))): lms(ls(x)>ls(y)?ls(x):ls(y))),
@@ -1172,8 +1172,10 @@ let audio_playing=0
 interface_app=lmi((self,i,x)=>{
 	if(x&&lis(i)){
 		if(i.v=='fullscreen')return set_fullscreen(lb(x)),x
+		if(i.v=='gridsize'  )return dr.grid_size=rmax(rect(1,1),rint(getpair(x))),x
 	}else if(lis(i)){
 		if(i.v=='fullscreen')return lmn(is_fullscreen())
+		if(i.v=='gridsize'  )return lmpair(dr.grid_size)
 		if(i.v=='playing'   )return lmn(audio_playing)
 		if(i.v=='save'      )return lmnat(_=>((modal_enter&&modal_enter('save_deck'),NIL)))
 		if(i.v=='exit'      )return lmnat(_=>NIL) // does nothing in web-decker
@@ -1342,7 +1344,7 @@ layout_plaintext=(text,font,align,mx)=>{
 			if(c=='\n'){lnl()}else{cursor.x+=size.x}
 			if(cursor.y>=(mx.y/fh)){
 				layout=layout.slice(0,max(1,layout.length-3))
-				layout[layout.length-1].c=ELLIPSIS,layout[layout.length-1].pos.w=font_gw(font,ELLIPSIS)+fs
+				layout[layout.length-1].char=ELLIPSIS,layout[layout.length-1].pos.w=font_gw(font,ELLIPSIS)+fs
 				z=text.length-1;break
 			}
 		}
@@ -1394,14 +1396,21 @@ draw_text_wrap=(r,l,pattern)=>{
 		draw_char(radd(g.pos,r),g.font,g.char,g.pat==1?pattern:g.pat)
 	}frame.clip=oc;
 }
-draw_text_rich=(r,l,pattern,opaque)=>{
-	const oc=frame.clip;frame.clip=r;for(let z=0;z<l.layout.length;z++){
+draw_text_rich_raw=(r,l,pattern,opaque)=>{
+	for(let z=0;z<l.layout.length;z++){
 		const g=l.layout[z];if(g.pos.w<1)continue
 		if(g.pos.y+g.pos.h<0||g.pos.y>r.h)continue; g.pos.x+=r.x, g.pos.y+=r.y
 		if(lis(g.arg)&&count(g.arg))draw_hline(g.pos.x,g.pos.x+g.pos.w,g.pos.y+g.pos.h-1,19)
 		if(image_is(g.arg)){image_paste(g.pos,frame.clip,g.arg,frame.image,opaque)}
 		else{draw_char(g.pos,g.font,g.char,g.pat==1?pattern:g.pat)}
-	}frame.clip=oc
+	}
+}
+draw_text_rich=(r,l,pattern,opaque)=>{
+	const oc=frame.clip;frame.clip=r;draw_text_rich_raw(r,l,pattern,opaque),frame.clip=oc
+}
+draw_text_align=(r,text,font,pattern,align)=>{
+	const fh=font_h(font),l=layout_plaintext(text,font,align,rect(r.w,max(r.h,fh)))
+	draw_text_rich_raw(rcenter(r,l.size),l,pattern,1)
 }
 draw_9seg=(r,dst,src,m,clip,opaque,pal)=>{
 	const o=rect(r.x,r.y), s=src.size, ss=s, ds=dst.size; if(s.x<1||s.y<1)return
@@ -1686,7 +1695,7 @@ buffer_hist=(buff,sign)=>{
 image_bounds=i=>{
 	const s=i.size,d=rect(s.x,s.y,0,0)
 	for(let z=0;z<i.pix.length;z++)if(i.pix[z]!=0){const x=z%s.x,y=0|(z/s.x);d.x=min(d.x,x),d.y=min(d.y,y),d.w=max(d.w,x),d.h=max(d.h,y)}
-	return lmd(["pos","size"].map(lms),[d,rmin(s,rect(d.w-d.x+1,d.h-d.y+1))].map(lmpair))
+	return lmd(["pos","size"].map(lms),[d,rmin(s,rect(max(0,d.w-d.x+1),max(0,d.h-d.y+1)))].map(lmpair))
 }
 image_merge_op=(target,src,op)=>{
 	const ts=target.size,bs=src.size,t=target.pix,b=src.pix;if(bs.x==0||bs.y==0)return
@@ -1958,8 +1967,8 @@ rtext_append=(tab,t,f,a,p)=>{
 }
 rtext_appendr=(tab,row)=>{fv=tab_get(row,'font'),av=tab_get(row,'arg'),pv=tab_get(row,'pat');tab_get(row,'text').map((t,i)=>rtext_append(tab,t,fv[i],av[i],pv[i]))}
 rtext_string=(tab,pos)=>{
-	pos=pos||rect(0,RTEXT_END);let r='',i=0,a=min(pos.x,pos.y),b=max(pos.x,pos.y)
-	tab_get(tab,'text').map(s=>{for(let z=0;z<s.v.length;z++,i++)if(i>=a&&i<b)r+=s.v[z]});return lms(r)
+	pos=pos||rect(0,RTEXT_END);let r='',i=0,a=min(pos.x,pos.y),b=max(pos.x,pos.y),g=tab_get(tab,'arg')
+	tab_get(tab,'text').map((s,ix)=>{const img=image_is(g[ix]);for(let z=0;z<s.v.length;z++,i++)if(!img&&i>=a&&i<b)r+=s.v[z]});return lms(r)
 }
 rtext_is_plain=x=>{
 	if(!lit(x))return 0;const tv=tab_get(x,'text'),fv=tab_get(x,'font'),av=tab_get(x,'arg'),pv=tab_get(x,'pat');
@@ -2100,7 +2109,6 @@ field_read=(x,card)=>{
 				return self.value=rtext_cast(x),field_notify(self),x
 			}
 			if(ikey(i,'border'   ))return self.border=lb(x),x
-			if(ikey(i,'pattern'  ))return self.pattern=0|clamp(0,ln(x),255),x
 			if(ikey(i,'scrollbar'))return self.scrollbar=lb(x),x
 			if(ikey(i,'style'    ))return self.style=normalize_enum(field_styles,ls(x)),iwrite(self,lms('value'),ifield(self,'value')),x
 			if(ikey(i,'align'    ))return self.align=normalize_enum(field_aligns,ls(x)),x
@@ -2109,7 +2117,6 @@ field_read=(x,card)=>{
 			if(ikey(i,'images'   )){const v=value_inherit(self,'value');return v!=undefined?rtext_read_images(v):lml([])}
 			if(ikey(i,'data'     )){const v=value_inherit(self,'value');return v!=undefined?dyad.parse(lms('%J'),rtext_string(v)):NIL}
 			if(ikey(i,'border'   ))return lmn(ivalue(self,ls(i),1))
-			if(ikey(i,'pattern'  ))return lmn(ivalue(self,ls(i),1))
 			if(ikey(i,'value'    ))return value_inherit(self,ls(i))||rtext_cast()
 			if(ikey(i,'scroll'   ))return value_inherit(self,ls(i))||ZERO
 			if(ikey(i,'scrollbar'))return lmn(ivalue(self,ls(i),0))
@@ -2128,7 +2135,6 @@ field_read=(x,card)=>{
 	},'field');ri.card=card
 	{const k=lms('value'),v=dget(x,k);if(v)iwrite(ri,k,rtext_read(v))}
 	init_field(ri,'border'   ,x)
-	init_field(ri,'pattern'  ,x)
 	init_field(ri,'scrollbar',x)
 	init_field(ri,'style'    ,x)
 	init_field(ri,'align'    ,x)
@@ -2138,7 +2144,6 @@ field_read=(x,card)=>{
 field_write=x=>{
 	const r=lmd([lms('type')],[lms('field')])
 	if(x.border!=undefined)dset(r,lms('border'),lmn(x.border))
-	if(x.pattern!=undefined&&x.pattern!=1)dset(r,lms('pattern'),lmn(x.pattern))
 	if(x.scrollbar!=undefined)dset(r,lms('scrollbar'),lmn(x.scrollbar))
 	if(x.style&&x.style!='rich')dset(r,lms('style'),lms(x.style))
 	if(x.align&&x.align!='left')dset(r,lms('align'),lms(x.align))
@@ -2320,8 +2325,8 @@ canvas_read=(x,card)=>{
 		if(!is_rooted(self))return NIL
 		if(x){
 			if(ikey(i,'brush'    )){let n=0|max(0,ln(x));if(lis(x)){const v=dkix(self.card.deck.brushes,x);if(v!=-1)n=24+v};return self.brush=n,x}
-			if(ikey(i,'pattern'  ))return self.pattern=0|clamp(0,ln(x),255),x
 			if(ikey(i,'font'     ))return self.font=normalize_font(self.card.deck.fonts,x),x
+			if(ikey(i,'pattern'  ))return interface_widget(self,i,x)
 			if(!lis(i)){const img=container_image(self,1);return img.f(img,i,x)}
 			if(self.free)return x
 			if(ikey(i,'border'   ))return self.border=lb(x),x
@@ -2334,7 +2339,6 @@ canvas_read=(x,card)=>{
 			if(ikey(i,'border'   ))return lmn(ivalue(self,ls(i),1))
 			if(ikey(i,'draggable'))return lmn(ivalue(self,ls(i),0))
 			if(ikey(i,'brush'    ))return lmn(ivalue(self,ls(i),0))
-			if(ikey(i,'pattern'  ))return lmn(ivalue(self,ls(i),1))
 			if(ikey(i,'size'     ))return lmpair(ivalue(self,ls(i),rect(100,100)))
 			if(ikey(i,'scale'    ))return lmn(ivalue(self,ls(i),1.0))
 			if(ikey(i,'lsize'    )){const s=getpair(ifield(self,'size')),z=ln(ifield(self,'scale'));return lmpair(rect(ceil(s.x/z),ceil(s.y/z)))}
@@ -2382,7 +2386,6 @@ canvas_read=(x,card)=>{
 	init_field(ri,'border'   ,x)
 	init_field(ri,'draggable',x)
 	init_field(ri,'brush'    ,x)
-	init_field(ri,'pattern'  ,x)
 	init_field(ri,'font'     ,x)
 	return ri
 }
@@ -2392,7 +2395,6 @@ canvas_write=x=>{
 	if(x.image&&!is_blank(x.image)&&!x.volatile)dset(r,lms('image'),lms(image_write(x.image)))
 	if(x.draggable)dset(r,lms('draggable'),lmn(x.draggable))
 	if(x.brush    )dset(r,lms('brush'    ),lmn(x.brush))
-	if(x.pattern!=undefined&&x.pattern!=1)dset(r,lms('pattern'),lmn(x.pattern))
 	if(x.scale)dset(r,lms('scale'),lmn(x.scale))
 	if(x.clip&&!requ(x.clip,rpair(rect(),getpair(ifield(x,'lsize')))))dset(r,lms('clip'),lml([x.clip.x,x.clip.y,x.clip.w,x.clip.h].map(lmn)))
 	return r
@@ -2412,7 +2414,7 @@ contraption_read=(x,card)=>{
 			iwrite(dwid,lms('pos'),lmpair(a)),iwrite(dwid,lms('size'),lmpair(rsub(b,a)))
 		})
 	}
-	const masks={name:1,index:1,image:1,script:1,locked:1,animated:1,volatile:1,pos:1,show:1,font:1,toggle:1,event:1,offset:1,parent:1}
+	const masks={name:1,index:1,image:1,script:1,locked:1,animated:1,volatile:1,pos:1,show:1,font:1,pattern:1,toggle:1,event:1,offset:1,parent:1}
 	const ri=lmi((self,i,x)=>{
 		if(!is_rooted(self))return NIL
 		if(x){
@@ -2451,12 +2453,14 @@ contraption_write=x=>{
 	});return r
 }
 widget_shows={solid:1,invert:1,transparent:1,none:1}
+default_pattern=wid=>button_is(wid)?32: (slider_is(wid)&&ls(ifield(wid,'style'))=='compact')?32: 1
 interface_widget=(self,i,x)=>{
 	widget_rename=(card,a,b)=>{const w=card.widgets,i=dkix(w,a);w.k[i]=b,w.v[i].name=ls(b)}
 	if(x){
 		if(ikey(i,'name'    ))return widget_rename(self.card,lms(self.name),ukey(self.card.widgets,lms(ls(x)),ls(x),lms(self.name))),x
 		if(ikey(i,'index'   ))return reorder(self.card.widgets,dvix(self.card.widgets,self),ln(x)),x
 		if(ikey(i,'font'    ))return self.font=normalize_font(self.card.deck.fonts,x),x
+		if(ikey(i,'pattern' ))return self.pattern=0|clamp(0,ln(x),255),x
 		if(ikey(i,'script'  ))return self.script=ls(x),x
 		if(ikey(i,'locked'  ))return self.locked=lb(x),x
 		if(ikey(i,'animated'))return self.animated=lb(x),x
@@ -2474,6 +2478,7 @@ interface_widget=(self,i,x)=>{
 		if(ikey(i,'pos'     ))return lmpair(ivalue(self,ls(i),rect()))
 		if(ikey(i,'show'    ))return lms(ivalue(self,ls(i),'solid'))
 		if(ikey(i,'font'    ))return dget(self.card.deck.fonts,lms(ivalue(self,ls(i),button_is(self)?'menu':'body')))
+		if(ikey(i,'pattern' ))return lmn(ivalue(self,ls(i),default_pattern(self)))
 		if(ikey(i,'event'   ))return lmnat(args=>n_event(self,args))
 		if(ikey(i,'parent'  ))return self.card
 		if(ikey(i,'toggle'  ))return lmnat(([s,v])=>{
@@ -2495,6 +2500,7 @@ widget_read=(x,card)=>{
 	init_field(ri,'size'    ,x)
 	init_field(ri,'script'  ,x)
 	init_field(ri,'font'    ,x)
+	init_field(ri,'pattern' ,x)
 	init_field(ri,'locked'  ,x)
 	init_field(ri,'animated',x)
 	init_field(ri,'volatile',x)
@@ -2515,6 +2521,7 @@ widget_write=x=>{
 	if(x.volatile)dset(r,lms('volatile'),lmn(x.volatile))
 	if(x.script  )dset(r,lms('script'  ),lms(x.script))
 	if(x.font&&x.font!=(button_is(x)?"menu":"body"))dset(r,lms('font'),lms(x.font))
+	if(x.pattern!=null&&x.pattern!=default_pattern(x))dset(r,lms('pattern'),lmn(x.pattern))
 	if(x.show&&x.show!='solid')dset(r,lms('show'),lms(x.show))
 	return dyad[','](r,button_is(x)?button_write(x): field_is (x)?field_write (x):slider_is(x)?slider_write(x):
 	                   grid_is  (x)?grid_write  (x): canvas_is(x)?canvas_write(x):contraption_is(x)?contraption_write(x): lmd())
@@ -2693,6 +2700,7 @@ prototype_read=(x,deck)=>{
 			if(ikey(i,'script'     ))return lms(self.script||'')
 			if(ikey(i,'template'   ))return lms(self.template||'')
 			if(ikey(i,'font'       ))return monad.first(self.deck.fonts)
+			if(ikey(i,'pattern'    ))return ONE
 			if(ikey(i,'show'       ))return lms('solid')
 			if(ikey(i,'parent'     ))return ifield(self.deck,'card')
 			if(ikey(i,'size'       ))return lmpair(self.size)

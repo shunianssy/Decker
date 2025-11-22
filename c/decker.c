@@ -228,7 +228,6 @@ enum modal_type{
 	modal_alert,modal_confirm,modal_input,modal_url,
 	modal_alert_lil,modal_confirm_lil,modal_input_lil,modal_choose_lil,modal_open_lil,modal_save_lil,
 	modal_import_image,modal_export_image,
-	modal_import_script,modal_export_script,
 	modal_import_sound,
 	modal_import_deck,
 	modal_open_deck,modal_save_deck,modal_save_locked,modal_confirm_quit,modal_confirm_new,modal_confirm_script,modal_multiscript,
@@ -250,7 +249,12 @@ typedef struct {
 } modal_state; modal_state ms={0};
 typedef struct {modal_state ms;widget_state wid;} modal_context;
 modal_context ms_stack[8]={{{0},{0}}};int ms_index=0;
-void modal_enter(int type);void modal_exit(int value);void field_linkspan(lv*arg);void field_patspan(int pat); // forward refs
+lv* modal_open_path(void){
+	int n=ms.grid.table->n,r=ms.grid.row;
+	char t[PATH_MAX]={0};directory_cat(t,ms.path,r<n&&r>=0?ms.grid.table->lv[1]->lv[r]->sv:"");return lmcstr(t);
+}
+void modal_enter(int type);void modal_exit(int value);int field_linkspan(lv*arg);void field_patspan(int pat); // forward refs
+void sound_edit(lv*v);
 void modal_push(int type){
 	if(ms.type!=modal_none){
 		ms_stack[ms_index]=(modal_context){ms,wid};
@@ -264,6 +268,7 @@ void modal_push(int type){
 }
 void modal_pop(int value){
 	lv*l=(ms.type==modal_link&&value)?rtext_all(ms.text.table):NULL;
+	lv*s=(ms.subtype==modal_import_sound&&value)?modal_open_path():NULL;
 	int p=value!=-1&&ms.type==modal_spanpattern;
 	modal_exit(value);if(ms_index>0){
 		ms_index--,ms=ms_stack[ms_index].ms,wid=ms_stack[ms_index].wid;
@@ -273,8 +278,12 @@ void modal_pop(int value){
 		unswizzle_slot(ms.old_wid.gv,ms.old_wid.gv_slot)
 		unswizzle_slot(ms.old_wid.fv,ms.old_wid.fv_slot)
 	}
-	if(l){pair c=wid.cursor;field_linkspan(l);wid.cursor=c;}
+	if(l){pair c=wid.cursor;int s=field_linkspan(l);if(c.x<c.y){c.y-=s;}else{c.x-=s;}wid.cursor=c;}
 	if(p){pair c=wid.cursor;field_patspan(value);wid.cursor=c;}
+	if(s){
+		au.target=n_deck_add(deck,l_list(lmistr("sound")));mark_dirty();modal_enter(modal_recording);
+		sound_edit(n_readwav(NULL,l_list(s)));au.sel=(pair){0,0},au.head=0;
+	}
 }
 int no_menu(void){return menu.active==-1&&menu.stick==-1;}
 int in_layer(void){return no_menu()&&(ms.type?ms.in_modal:1)&&((!running()&&!msg.overshoot)||ms.type!=modal_none);}
@@ -303,9 +312,11 @@ lv*n_apprender(lv*self,lv*a){(void)self;a=l_first(a);return widget_is(a)?draw_wi
 lv*interface_app(lv*self,lv*i,lv*x){
 	if(x&&lis(i)){
 		ikey("fullscreen"){toggle_fullscreen=windowed!=!lb(x);return x;}
+		ikey("gridsize"  ){dr.grid_size=pair_max((pair){1,1},getpair(x));return x;}
 	}else if(lis(i)){
 		ikey("fullscreen")return lmn(!windowed);
 		ikey("playing"   )return lmn(audio_playing);
+		ikey("gridsize"  )return lmpair(dr.grid_size);
 		ikey("save"      )return lmnat(n_appsave,NULL);
 		ikey("exit"      )return lmnat(n_appexit,NULL);
 		ikey("show"      )return lmnat(n_appshow,NULL);
@@ -482,7 +493,7 @@ rect scrollbar(rect r,int n,int line,int page,int*scroll,int visible,int inverte
 }
 int widget_button(lv*target,button x,int value){
 	int l=x.locked||!in_layer(); if(!x.font)x.font=FONT_MENU; rect b=x.size; char*pal=patterns_pal(ifield(deck,"patterns"));
-	int fcol=l?13:x.show==show_invert?32:1, bcol=x.show==show_invert?1:32, scol=x.show==show_invert?32:1;
+	int fcol=l?13:x.show==show_invert?x.pattern:1, bcol=x.show==show_invert?1:x.pattern, scol=x.show==show_invert?x.pattern:1;
 	int sel=!l&&x.show!=show_none&&x.style!=button_invisible&&wid.active==wid.count;
 	int sh=0,shh=0;if(!l&&uimode==mode_interact&&!wid.fv&&!ev.shift&&x.show!=show_none&&x.shortcut){
 		if(keyup[(int)x.shortcut]){shh=1;}else if(keydown[(int)x.shortcut]){sh=1;}
@@ -492,28 +503,28 @@ int widget_button(lv*target,button x,int value){
 	if(x.show==show_none)return 0; rect ar=inset(b,2);
 	if(x.style==button_round){
 		draw_boxr(b,fcol,bcol,x.show!=show_transparent);
-		draw_textc(inset(b,3),x.text,x.font,fcol);
+		if(cl)draw_rect(ar,fcol);
+		draw_text_align(inset(b,3),x.text,x.font,cl?bcol:fcol,align_center);
 		if(sel)draw_box(ar,0,13);
-		if(cl)draw_invert(pal,ar);
 	}
 	if(x.style==button_rect){
 		if(cl){b=(rect){b.x+1,b.y+1,b.w-1,b.h-1},ar=(rect){ar.x+1,ar.y+1,ar.w-1,ar.h-1};if(x.show!=show_transparent)draw_rect(b,bcol);draw_box(b,0,fcol);}
 		else  {b=(rect){b.x  ,b.y  ,b.w-1,b.h-1},ar=(rect){ar.x  ,ar.y  ,ar.w-1,ar.h-1};draw_shadow(b,fcol,bcol,x.show!=show_transparent);}
-		draw_textc(inset(b,3),x.text,x.font,fcol);if(sel)draw_box(ar,0,13);
+		draw_text_align(inset(b,3),x.text,x.font,fcol,align_center);if(sel)draw_box(ar,0,13);
 	}
 	if(x.style==button_check||x.style==button_radio){
 		if(x.show!=show_transparent)draw_rect(b,bcol);
-		pair ts=font_textsize(x.font,x.text), cdim=image_size(x.style==button_check?CHECKS[0]:RADIOS[0]); int bh=MAX(ts.y,cdim.y);
+		pair ts=font_textsize(x.font,x.text), cdim=image_size(x.style==button_check?CHECKS[0]:RADIOS[0]); ts.y=MIN(ts.y,b.h); int bh=MAX(ts.y,cdim.y);
 		rect br={b.x,b.y+((b.h-bh)/2),b.w,bh}, to=box_intersect(b,(rect){br.x+cdim.x,br.y+(br.h-ts.y)/2,b.w-cdim.x,ts.y});
 		draw_rect((rect){br.x+1,br.y+1,cdim.x-4,cdim.y-3},bcol);
 		if(x.style==button_check){draw_icon((pair){br.x,br.y},CHECKS[(value^(cl||cr))+2*x.locked],scol);}
 		else{pair p={br.x,br.y};draw_icon(p,RADIOS[3],bcol),draw_icon(p,RADIOS[cl||cr?1:0],fcol);if(value)draw_icon(p,RADIOS[2],fcol);}
-		draw_text_fit(to,x.text,x.font,fcol);ar=to;
+		if(cl)draw_rect(to,fcol);
+		draw_text_fit(to,x.text,x.font,cl?bcol:fcol);
 		if(sel)draw_box((rect){to.x-2,to.y-1,to.w+2,to.h+2},0,13);
-		if(cl)draw_invert(pal,ar);
 	}
 	if(x.style==button_invisible){
-		draw_textc(inset(b,3),x.text,x.font,fcol);
+		draw_text_align(inset(b,3),x.text,x.font,fcol,align_center);
 		if(cl&&x.show!=show_transparent)draw_invert(pal,ar);
 	}
 	if(target&&cr)msg.target_click=target;
@@ -562,7 +573,9 @@ void widget_slider(lv*target,slider x){
 	}
 	if(x.style==slider_compact){
 		if(x.show==show_transparent){draw_rect((rect){b.x+1,b.y+1,13,b.h-2},bcol),draw_rect((rect){b.x+b.w-14,b.y+1,13,b.h-2},bcol);}
-		draw_boxr(b,fcol,bcol,x.show!=show_transparent),draw_textc((rect){b.x+14,b.y,b.w-28,b.h},t->sv,x.font,fcol);
+		draw_boxr(b,fcol,bcol,x.show!=show_transparent);
+		rect tr={b.x+14,b.y,b.w-28,b.h};int ccol=x.show==show_invert?1:x.pattern;
+		draw_rect((rect){tr.x,tr.y+1,tr.w,tr.h-2},ccol),draw_textc(tr,t->sv,x.font,fcol==ccol?bcol:fcol);
 		#define comp_btn(xo,dir,ba,li,en) {\
 			rect bb={b.x+xo,b.y,14,b.h}; int a=en&&!l&&over(bb), o=a&&(ev.mu||ev.drag)&&dover(bb);\
 			if(o&&ev.md)x.value+=(dir*x.step); if(a)uicursor=cursor_point;\
@@ -672,7 +685,7 @@ int widget_grid(lv*target,grid x,grid_val*value){
 			else if(z<fk&&(x.format[z]=='t'||x.format[z]=='T')){
 				rect r={hs.x+1,bb.y+rh*y,hs.w-2,rh}; // display rich text:
 				pair t=layout_richtext(deck,rtext_cast(v),fnt,align_left,r.w);
-				draw_text_rich((rect){r.x,r.y+ceil(t.y<r.h?(r.h-t.y)/2.0:0),r.w,r.h},ccol,0);
+				draw_text_rich_raw((rect){r.x,r.y+ceil(t.y<r.h?(r.h-t.y)/2.0:0),r.w,r.h},ccol,0);
 			}
 			else{
 				rect r={hs.x+1,bb.y+rh*y,hs.w-2,rh}; // right-align numeric columns:
@@ -891,9 +904,10 @@ void field_fontspan(lv*font){
 	lv*s=rtext_span(wid.fv->table,wid.cursor),*c=dget(s,lmistr("font"));
 	EACH(z,c)c->lv[z]=font;field_editr(n_rtext_cat(NULL,l_list(s)),wid.cursor);
 }
-void field_linkspan(lv*link){
-	lv*s=rtext_span(wid.fv->table,wid.cursor),*c=dget(s,lmistr("arg"));
-	EACH(z,c)c->lv[z]=link;field_editr(n_rtext_cat(NULL,l_list(s)),wid.cursor);
+int field_linkspan(lv*link){
+	lv*s=rtext_span(wid.fv->table,wid.cursor),*c=dget(s,lmistr("arg")),*t=dget(s,lmistr("text"));int sk=0;
+	EACH(z,c){if(image_is(c->lv[z])){t->lv[z]=lmistr(""),sk++;}else{c->lv[z]=link;}}field_editr(n_rtext_cat(NULL,l_list(s)),wid.cursor);
+	return sk;
 }
 void field_patspan(int pat){
 	lv*s=rtext_span(wid.fv->table,wid.cursor),*c=dget(s,lmistr("pat"));
@@ -968,10 +982,10 @@ void widget_contraption(lv*x){
 	handle_widgets(ivalue(x,"widgets"),(pair){b.x,b.y});frame.clip=oc;
 }
 
-int  ui_button  (rect r,char*label,int enable          ){return widget_button(NULL,(button){label,r,FONT_MENU,button_round,show_solid,!enable,0},0);}
-int  ui_toggle  (rect r,char*label,int inv,int enable  ){return widget_button(NULL,(button){label,r,FONT_MENU,button_round,inv?show_invert:show_solid,!enable,0},0);}
-int  ui_radio   (rect r,char*label,int enable,int value){return widget_button(NULL,(button){label,r,FONT_BODY,button_radio,show_solid,!enable,0},value);}
-int  ui_checkbox(rect r,char*label,int enable,int value){return widget_button(NULL,(button){label,r,FONT_BODY,button_check,show_solid,!enable,0},value);}
+int  ui_button  (rect r,char*label,int enable          ){return widget_button(NULL,(button){label,r,FONT_MENU,32,button_round,show_solid,!enable,0},0);}
+int  ui_toggle  (rect r,char*label,int inv,int enable  ){return widget_button(NULL,(button){label,r,FONT_MENU,32,button_round,inv?show_invert:show_solid,!enable,0},0);}
+int  ui_radio   (rect r,char*label,int enable,int value){return widget_button(NULL,(button){label,r,FONT_BODY,32,button_radio,show_solid,!enable,0},value);}
+int  ui_checkbox(rect r,char*label,int enable,int value){return widget_button(NULL,(button){label,r,FONT_BODY,32,button_check,show_solid,!enable,0},value);}
 void ui_field   (rect r,           field_val*value){widget_field(NULL,(field){r,FONT_BODY,show_solid,0,1     ,field_plain,align_left,0,1},value);}
 void ui_dfield  (rect r,int enable,field_val*value){widget_field(NULL,(field){r,FONT_BODY,show_solid,0,1     ,field_plain,align_left,!enable,1},value);}
 void ui_textedit(rect r,int border,field_val*value){widget_field(NULL,(field){r,FONT_BODY,show_solid,1,border,field_plain,align_left,0,1},value);}
@@ -1295,9 +1309,10 @@ void modal_enter(int type){
 		ms.grid2=(grid_val){res_enumerate(deck),0,-1,-1};
 	}
 	if(type==modal_link){
-		lv*t=ms.old_wid.fv->table;int i=rtext_get(t,ms.old_wid.cursor.y);
-		lv*ol=dget(t,lmistr("arg"))->lv[i<0?0:i];
-		ms.text=(field_val){rtext_cast(ol),0};if(ol->c)ms.old_wid.cursor=rtext_getr(t,ms.old_wid.cursor.y);
+		lv*t=ms.old_wid.fv->table,*s=dget(rtext_span(t,ms.old_wid.cursor),lmistr("arg"));
+		lv*ol=lmistr("");for(int z=0;z<s->c;z++){lv*v=s->lv[z];if(lis(v)&&v->c){ol=v;break;}}
+		if(ol->c&&s->c==1){ms.old_wid.cursor=rtext_getr(t,ms.old_wid.cursor.y);}
+		ms.text=(field_val){rtext_cast(ol),0};
 	}
 	if(type==modal_grid){
 		ms.name=(field_val){rtext_cast(lmn(dr.grid_size.x)),0};
@@ -1405,8 +1420,6 @@ void modal_enter(int type){
 	if(type==modal_confirm_new   ){ms.type=type=modal_confirm;}
 	if(type==modal_confirm_script){ms.type=type=modal_confirm;}
 	if(type==modal_multiscript   ){ms.type=type=modal_confirm;}
-	if(type==modal_import_script ){ms.type=type=modal_open, ms.filter=filter_code, ms.desc="Open any .lil or .txt file.";}
-	if(type==modal_export_script ){ms.type=type=modal_save, ms.filter=filter_code, ms.desc="Save script as a .lil file.";}
 	if(type==modal_import_sound  ){ms.type=type=modal_open, ms.filter=filter_sound,ms.desc="Open a .wav sound file.";}
 	if(type==modal_import_image  ){ms.type=type=modal_open, ms.filter=filter_image,ms.desc="Open an image file.";}
 	if(type==modal_export_image  ){ms.type=type=modal_save, ms.filter=filter_gif  ,ms.desc="Save a .gif image file.";}
@@ -1429,10 +1442,6 @@ void import_image(char*path){
 	setuimode(mode_draw),bg_paste(i->b,1);if(color&&!dr.color)dr.limbo_dither=1,dither_threshold=0.5;dr.fatbits=0;dr.omask=m;
 }
 lv* table_decode(lv*text,lv*format){return ms.edit_json?l_table(l_parse(lmistr("%J"),text)): n_readcsv(NULL,format->c?lml2(text,format):l_list(text));}
-lv* modal_open_path(void){
-	int n=ms.grid.table->n,r=ms.grid.row;
-	char t[PATH_MAX]={0};directory_cat(t,ms.path,r<n&&r>=0?ms.grid.table->lv[1]->lv[r]->sv:"");return lmcstr(t);
-}
 lv* modal_save_path(char*suffix){
 	char t[PATH_MAX]={0};directory_cat(t,ms.path,rtext_all(ms.text.table)->sv);
 	size_t sn=strlen(suffix)+1;if(!has_suffix(t,suffix)&&strlen(t)<PATH_MAX-sn)snprintf(t+strlen(t),sn,"%s",suffix);return lmcstr(t);
@@ -1447,13 +1456,6 @@ void modal_exit(int value){
 	wid=ms.old_wid;
 	if(wid.gv==&ms.old_wid.gv_slot)wid.gv=&wid.gv_slot;
 	if(wid.fv==&ms.old_wid.fv_slot)wid.fv=&wid.fv_slot;
-	if(ms.subtype==modal_import_script&&value){
-		field_exit(),sc.f=(field_val){rtext_cast(n_read(NULL,l_list(modal_open_path()))),0};
-	}
-	if(ms.subtype==modal_import_sound){
-		if(value){sound_edit(n_readwav(NULL,l_list(modal_open_path())));au.sel=(pair){0,0},au.head=0;}
-		modal_enter(modal_recording);return;
-	}
 	if(ms.subtype==modal_import_image&&value){import_image(modal_open_path()->sv);}
 	if(ms.subtype==modal_open_deck&&value){
 		lv*path=modal_open_path();
@@ -1513,16 +1515,10 @@ void modal_exit(int value){
 		lv*name=rtext_all(ms.name.table);rename_sound(deck,au.target,name);mark_dirty();
 		au.mode=record_stopped;modal_enter(modal_sounds);ms.grid.row=dgeti(ifield(deck,"sounds"),name);return;
 	}
-	if(ms.type==modal_widpattern&&value!=-1){EACH(z,ob.sel)iwrite(ob.sel->lv[z],lmistr("pattern"),lmn(value));}
-	if(ms.type==modal_confirm&&ms.subtype==modal_export_script&&!value){modal_enter(ms.subtype);return;}
+	if(ms.type==modal_widpattern&&value!=-1){ob_edit_prop("pattern",lmn(value));}
 	if(ms.type==modal_confirm&&ms.subtype==modal_save_deck    &&!value){modal_enter(ms.subtype);return;}
 	if(ms.type==modal_confirm&&ms.subtype==modal_save_locked  &&!value){modal_enter(ms.subtype);return;}
 	if(ms.type==modal_confirm&&ms.subtype==modal_save_lil     &&!value){modal_enter(ms.subtype);return;}
-	if(ms.subtype==modal_export_script&&value){
-		lv*path=modal_save_path(".lil");
-		if(directory_exists(path)&&ms.type!=modal_confirm){modal_save_replace(modal_export_script,"Lil script",path);return;}
-		n_write(NULL,lml2(path,rtext_all(sc.f.table)));
-	}
 	if(ms.subtype==modal_export_image&&value){
 		lv*path=modal_save_path(".gif");
 		if(directory_exists(path)&&ms.type!=modal_confirm){modal_save_replace(modal_export_image,"GIF file",path);return;}
@@ -1895,9 +1891,9 @@ void modals(void){
 			if(0==ln(ms.grid.table->lv[0]->lv[ms.grid.row])){
 				directory_child(ms.path,ms.grid.table->lv[1]->lv[ms.grid.row]->sv);
 				ms.grid=(grid_val){directory_enumerate(ms.path,ms.filter,0),0,0,-1};
-			}else{modal_exit(1);}
+			}else{if(ms.subtype==modal_import_sound){modal_pop(1);}else{modal_exit(1);}}
 		};c.x-=65;
-		if(ui_button((rect){c.x,c.y,60,20},"Cancel",1)||ev.exit)modal_exit(0);
+		if(ui_button((rect){c.x,c.y,60,20},"Cancel",1)||ev.exit){if(ms.subtype==modal_import_sound){modal_pop(0);}else{modal_exit(0);}}
 		if(ui_button((rect){b.x+b.w-125,b.y,60,20},"Home",!directory_is_home(ms.path))){
 			directory_home(ms.path);ms.grid=(grid_val){directory_enumerate(ms.path,ms.filter,0),0,0,-1};
 		}
@@ -2082,7 +2078,6 @@ void modals(void){
 		if(ui_radio((rect){ab.x,ab.y,b.w/2,16},"Align Right",1,align==align_right )){iwrite(f,lmistr("align"),lmistr("right" )),mark_dirty();}ab.y+=16;
 		pair c={b.x,b.y+b.h-20};
 		if(ui_button((rect){c.x,c.y,60,20},"Script...",1))setscript(f),modal_exit(0);c.x+=65;
-		if(ui_button((rect){c.x,c.y,65,20},"Pattern...",1))ob.pending_pattern=p.pattern,modal_push(modal_widpattern);
 		if(ui_button((rect){b.x+b.w-60,c.y,60,20},"OK",1)||ev.exit)modal_exit(1);
 	}
 	else if(ms.type==modal_slider_props){
@@ -3725,17 +3720,9 @@ void all_menus(void){
 		text_edit_menu();
 		return;
 	}
-	menu_bar("File",(ms.type==modal_none||ms.type==modal_recording)&&(!kc.on||uimode==mode_script));
+	menu_bar("File",(ms.type==modal_none||ms.type==modal_sounds||ms.type==modal_recording)&&(!kc.on||uimode==mode_script));
 	if(uimode==mode_script){
 		if(menu_item("Close Script",1,'\0'))close_script(NULL);
-		if(menu_item("Save Script",1,'s')){
-			lv*text=rtext_all(sc.f.table);parse(text->sv);
-			if(perr()){snprintf(sc.status,sizeof(sc.status),"Error: %s",par.error);wid.cursor=(pair){par.i,par.i};}
-			else{script_save(text);snprintf(sc.status,sizeof(sc.status),"Saved.");}
-		}
-		menu_separator();
-		if(menu_item("Import Script..."  ,1,'\0'))modal_enter(modal_import_script);
-		if(menu_item("Export Script..."  ,1,'\0'))modal_enter(modal_export_script);
 		menu_separator();
 		if(menu_item("Go to Deck",!deck_is(sc.target)           ,'\0'))close_script(deck);
 		lv*container=con();
@@ -3743,9 +3730,10 @@ void all_menus(void){
 		else                       {if(menu_item("Go to Card"     ,sc.target!=container,'\0'))close_script(container);}
 		if(menu_check("X-Ray Specs",!kc.on,sc.xray,'r'))sc.xray^=1;
 	}
+	else if(ms.type==modal_sounds){
+		if(menu_item("Import Sound...",1,'\0'))modal_push(modal_import_sound);
+	}
 	else if(ms.type==modal_recording){
-		if(menu_item("Import Sound...",1,'\0'))modal_enter(modal_import_sound);
-		menu_separator();
 		if(menu_item("Close Sound",1,'\0'))modal_exit(0);
 	}
 	else{
@@ -4015,7 +4003,6 @@ void all_menus(void){
 		if(menu_item("New Canvas",1,'\0')){lv*p=lmd();dset(p,lmistr("type"),lmistr("canvas"));ob_create(l_list(p));}
 		if(menu_item("New Grid"  ,1,'\0')){lv*p=lmd();dset(p,lmistr("type"),lmistr("grid"  ));ob_create(l_list(p));}
 		if(card_is(con())&&menu_item("New Contraption...",1,'\0'))modal_enter(modal_pick_contraption);
-		menu_separator();
 		if(menu_item("Order..."   ,ifield(con(),"widgets")->c,'O'))modal_enter(modal_orderwids);
 		menu_separator();
 		int al=1,aa=1,av=1,as=1,at=1,ai=1,an=1;EACH(z,ob.sel){
@@ -4034,6 +4021,10 @@ void all_menus(void){
 		if(menu_check("Show None"       ,ob.sel->c,ob.sel->c&&an,'\0'))ob_edit_prop("show",lmistr("none"));
 		menu_separator();
 		if(menu_item("Font..."      ,ob.sel->c   ,'\0'))modal_enter(modal_fonts);
+		if(menu_item("Pattern..."   ,ob.sel->c   ,'\0')){
+			ob.pending_pattern=ln(ifield(ob.sel->lv[0],"pattern"));
+			modal_enter(modal_widpattern);
+		}
 		if(menu_item("Script..."    ,ob.sel->c   ,'r')){
 			int m=1;for(int z=1;z<ob.sel->c;z++)if(!matchr(ifield(ob.sel->lv[0],"script"),ifield(ob.sel->lv[z],"script"))){m=0;break;}
 			if(m){setscript(l_drop(ZERO,ob.sel));}else{
@@ -4231,6 +4222,7 @@ void tick(lv*env){
 	track(sc.next)
 	track(sc.f.table)
 	track(ob.sel)
+	track(danger_open_deck)
 	dset(env,lmistr("wid"),wid_track(&wid));
 	dset(env,lmistr("ms"),modal_track(&ms));
 	if(ms_index){lv*r=lml(0);for(int z=0;z<ms_index;z++)ll_add(r,modal_track(&ms_stack[z].ms)),ll_add(r,wid_track(&ms_stack[z].wid));dset(env,lmistr("ms-stack"),r);}
@@ -4239,11 +4231,7 @@ void tick(lv*env){
 	track(audio_loop.clip)
 	track(orig_loop)
 	lv_collect();
-	if(!running()&&danger_open_pending){
-		danger_open_pending=0;
-		lv*file=n_read(NULL,l_list(lmcstr(danger_open_path)));
-		load_deck(deck_get(file)),set_path(l_count(file)?danger_open_path:"");
-	}
+	if(!running()&&danger_open_pending){danger_open_pending=0;load_deck(danger_open_deck),set_path(danger_open_path);}
 	interpreter_unlock();
 }
 
