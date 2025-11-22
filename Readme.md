@@ -1,3 +1,4 @@
+# [简体中文](https://github.com/shunianssy/Decker/blob/main/Readme_Zn.md)
 以下是原版简介
 
 Decker
